@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <!-- 수련회 콘텐츠라 검색엔진에 노출되지 않게 한다 -->
+  <meta name="robots" content="noindex, nofollow" />
+  <title>ACCESS DENIED — 증거 스캔</title>
+
+  <script src="./vendor/aframe.min.js"></script>
+  <script src="./vendor/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    /* ⚠️ body 에 배경색을 주면 안 된다.
+       MindAR 은 카메라 영상을 body 직속 <video z-index:-2> 로 삽입하는데,
+       CSS 페인팅 순서상 body 배경이 음수 z-index 보다 나중에 그려져 카메라를 덮는다.
+       배경은 html 에만 준다. */
+    html { background: #000; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body {
+      background: transparent;
+      font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: #e8ecf1;
+      /* iOS 주소창 때문에 100vh 가 잘리는 문제 회피.
+         MindAR 이 body.clientWidth/Height 로 카메라 영상을 센터크롭하므로
+         body 가 뷰포트 크기를 정확히 가져야 한다. */
+      height: 100dvh;
+    }
+
+    /* ── 시작 게이트 ─────────────────────────── */
+    #gate {
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px; padding: 32px 26px;
+      background: radial-gradient(120% 80% at 50% 0%, #16202b 0%, #05070a 70%);
+      text-align: center;
+    }
+    #gate.hidden { display: none; }
+    .tag {
+      font: 700 11.5px/1 ui-monospace, monospace; letter-spacing: .22em;
+      color: #ff4d5e; border: 1px solid #ff4d5e44; border-radius: 999px;
+      padding: 7px 13px;
+    }
+    #gate h1 { font-size: 26px; margin: 0; letter-spacing: -.01em; }
+    #gate p { margin: 0; color: #98a2b3; max-width: 21em; font-size: 14px; }
+    #start {
+      margin-top: 6px;
+      background: #3FE5A0; color: #06231a; border: 0; border-radius: 14px;
+      padding: 17px 40px; font-size: 16.5px; font-weight: 800; cursor: pointer;
+      box-shadow: 0 8px 30px #3fe5a033;
+    }
+    #start:active { transform: translateY(1px); }
+    .hint { font-size: 12.5px; color: #667085; }
+
+    /* 인앱 브라우저 / 오류 경고 */
+    #warn {
+      display: none; max-width: 24em; text-align: left;
+      background: #241416; border: 1px solid #ff4d5e44; border-radius: 14px;
+      padding: 18px 20px; color: #ffd9dd; font-size: 13.5px;
+    }
+    #warn.show { display: block; }
+    #warn b { color: #ff8e99; }
+    #warn ol { margin: 10px 0 0; padding-left: 18px; }
+    #warn li { margin: 5px 0; }
+    #copy {
+      margin-top: 14px; background: #ff4d5e; color: #fff; border: 0;
+      border-radius: 9px; padding: 10px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer;
+    }
+
+    /* ── 스캔 중 HUD ─────────────────────────── */
+    #hud {
+      position: fixed; z-index: 20; left: 0; right: 0;
+      bottom: calc(22px + env(safe-area-inset-bottom));
+      display: none; flex-direction: column; align-items: center; gap: 12px;
+      pointer-events: none;
+    }
+    #hud.show { display: flex; }
+    #status {
+      background: #000000b8; backdrop-filter: blur(8px);
+      border: 1px solid #ffffff1a; border-radius: 999px;
+      padding: 10px 20px; font-size: 13.5px; letter-spacing: -.01em;
+    }
+    #status .dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: #3FE5A0; margin-right: 8px; vertical-align: 1px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+    #sound {
+      pointer-events: auto;
+      background: #000000b8; backdrop-filter: blur(8px);
+      border: 1px solid #ffffff1a; color: #e8ecf1; border-radius: 999px;
+      padding: 9px 18px; font-size: 13px; cursor: pointer; display: none;
+    }
+    #sound.show { display: block; }
+
+    /* 스캔 조준 프레임 */
+    #reticle {
+      position: fixed; z-index: 15; inset: 0; display: none;
+      align-items: center; justify-content: center; pointer-events: none;
+    }
+    #reticle.show { display: flex; }
+    #reticle > div {
+      width: min(62vw, 260px); aspect-ratio: 3 / 4;
+      border: 1.5px solid #3fe5a066; border-radius: 14px;
+    }
+    #reticle.found > div { border-color: #3FE5A0; }
+
+    /* a-scene 에 z-index 를 주지 않는다 — 카메라 영상(-2) 위 레이어 순서는
+       A-Frame 기본값에 맡긴다. 캔버스는 투명하므로 영상이 그대로 보인다. */
+
+    /* 진단 표시 — 카메라가 안 보일 때 원인을 바로 알 수 있게 */
+    #dbg {
+      position: fixed; z-index: 25;
+      top: calc(10px + env(safe-area-inset-top)); left: 12px;
+      font: 11px/1.5 ui-monospace, monospace; color: #ffffff66;
+      background: #00000066; border-radius: 6px; padding: 5px 8px;
+      display: none; white-space: pre;
+    }
+    #dbg.show { display: block; }
+</style>
+</head>
+<body>
+
+  <!-- ── 시작 게이트 ── -->
+  <div id="gate">
+    <div class="tag">CLASSIFIED</div>
+    <h1>증거 스캔</h1>
+    <p>증거물을 카메라로 비추면 숨겨진 영상이 재생됩니다.<br />조별 수사파일 · 벽보 · 역할 배지</p>
+
+    <div id="warn"></div>
+
+    <button id="start">카메라 켜고 시작</button>
+    <div class="hint">카메라 권한을 허용해 주세요 · 소리가 나옵니다</div>
+  </div>
+
+  <!-- ── HUD ── -->
+  <div id="dbg"></div>
+  <div id="reticle"><div></div></div>
+  <div id="hud">
+    <button id="sound">🔇 소리 켜기</button>
+    <div id="status"><span class="dot"></span>증거물을 화면에 담아 주세요</div>
+  </div>
+
+  <!-- ── AR 씬 ── -->
+  <a-scene
+    mindar-image="imageTargetSrc: ./public/targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1; missTolerance: 5; warmupTolerance: 5"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <!-- timeout 을 넉넉히 — 영상이 커서 기본 3초로는 씬 로드가 막힌다 -->
+    <a-assets timeout="30000">
+      <video id="v0" src="./public/video/hack.mp4"  preload="metadata" playsinline webkit-playsinline muted loop="false"></video>
+      <video id="v1" src="./public/video/intro.mp4" preload="metadata" playsinline webkit-playsinline muted loop="false"></video>
+      <video id="v2" src="./public/video/hack.mp4"  preload="metadata" playsinline webkit-playsinline muted loop="false"></video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!-- 타겟 폭이 1 단위. 영상은 16:9 → 높이 0.5625 -->
+    <a-entity id="t0" mindar-image-target="targetIndex: 0">
+      <a-video src="#v0" width="1" height="0.5625" position="0 0 0.02"></a-video>
+    </a-entity>
+    <a-entity id="t1" mindar-image-target="targetIndex: 1">
+      <a-video src="#v1" width="1" height="0.5625" position="0 0 0.02"></a-video>
+    </a-entity>
+    <a-entity id="t2" mindar-image-target="targetIndex: 2">
+      <a-video src="#v2" width="1" height="0.5625" position="0 0 0.02"></a-video>
+    </a-entity>
+  </a-scene>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const gate = $('gate'), warn = $('warn'), startBtn = $('start');
+  const hud = $('hud'), statusEl = $('status'), reticle = $('reticle'), soundBtn = $('sound');
+
+  const TARGETS = [
+    { id: 't0', video: 'v0', label: '조별 수사파일' },
+    { id: 't1', video: 'v1', label: 'ACCESS DENIED 벽보' },
+    { id: 't2', video: 'v2', label: '역할 배지' },
+  ];
+
+  const setStatus = (html, spinning = true) => {
+    statusEl.innerHTML = (spinning ? '<span class="dot"></span>' : '') + html;
+  };
+
+  // ── 1. 인앱 브라우저 차단 ────────────────────────────────
+  // 카카오톡·인스타그램 등의 내장 브라우저는 getUserMedia 를 막는다.
+  // QR 을 카톡으로 뿌리면 학생 폰에서 검은 화면만 나오므로 반드시 안내가 필요하다.
+  function detectInApp() {
+    const ua = navigator.userAgent;
+    if (/KAKAOTALK/i.test(ua)) return '카카오톡';
+    if (/Instagram/i.test(ua)) return '인스타그램';
+    if (/FBAN|FBAV/i.test(ua)) return '페이스북';
+    if (/Line\//i.test(ua)) return '라인';
+    if (/NAVER\(inapp/i.test(ua)) return '네이버 앱';
+    if (/DaumApps/i.test(ua)) return '다음 앱';
+    return null;
+  }
+
+  const inApp = detectInApp();
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (inApp) {
+    startBtn.style.display = 'none';
+    warn.classList.add('show');
+    warn.innerHTML =
+      `<b>${inApp} 내장 브라우저에서는 카메라를 쓸 수 없습니다.</b>` +
+      (isIOS
+        ? `<ol><li>오른쪽 아래 <b>···</b> 또는 나침반 아이콘을 누르세요</li>
+             <li><b>Safari로 열기</b>를 선택하세요</li></ol>`
+        : `<ol><li>오른쪽 위 <b>⋮</b> 를 누르세요</li>
+             <li><b>다른 브라우저로 열기</b>(Chrome)를 선택하세요</li></ol>`) +
+      `<button id="copy">링크 복사하기</button>`;
+    $('copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        $('copy').textContent = '복사됨 — 브라우저에 붙여넣기';
+      } catch {
+        $('copy').textContent = location.href;
+      }
+    });
+    // 안드로이드 카카오톡은 외부 브라우저 강제 열기가 가능
+    if (/KAKAOTALK/i.test(navigator.userAgent) && !isIOS) {
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+    }
+    return;
+  }
+
+  // ── 2. 보안 컨텍스트 확인 ───────────────────────────────
+  if (!window.isSecureContext) {
+    startBtn.style.display = 'none';
+    warn.classList.add('show');
+    warn.innerHTML =
+      `<b>https 가 아니어서 카메라를 쓸 수 없습니다.</b>` +
+      `<ol><li>맥에서 테스트할 때는 <b>http://localhost:8080</b> 으로 접속하세요</li>
+           <li>폰에서 테스트할 때는 <b>https</b> 주소가 필요합니다 (README 참고)</li></ol>`;
+    return;
+  }
+
+  // ── 3. 영상 오디오 해제 ────────────────────────────────
+  // iOS 는 사용자 제스처 없이는 소리 있는 재생을 막는다.
+  // 시작 버튼을 누른 그 순간에 각 video 를 한 번 재생·정지시켜 잠금을 풀어 둔다.
+  async function unlockVideos() {
+    for (const t of TARGETS) {
+      const v = $(t.video);
+      try {
+        v.muted = true;
+        await v.play();
+        v.pause();
+        v.currentTime = 0;
+        v.muted = false;
+      } catch {
+        // 실패하면 음소거 상태로 두고 HUD 에 소리 켜기 버튼을 노출한다
+        v.muted = true;
+        soundBtn.classList.add('show');
+      }
+    }
+  }
+
+  soundBtn.addEventListener('click', () => {
+    TARGETS.forEach((t) => { $(t.video).muted = false; });
+    soundBtn.classList.remove('show');
+  });
+
+  // ── 4. 시작 ────────────────────────────────────────────
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    startBtn.textContent = '카메라 준비 중…';
+
+    await unlockVideos();
+
+    const sceneEl = document.querySelector('a-scene');
+    const arSystem = sceneEl.systems['mindar-image-system'];
+
+    try {
+      await arSystem.start();
+    } catch (err) {
+      console.error(err);
+      startBtn.style.display = 'none';
+      warn.classList.add('show');
+      const denied = err && /denied|NotAllowed/i.test(String(err.name || err.message || err));
+      warn.innerHTML = denied
+        ? `<b>카메라 권한이 거부되었습니다.</b>
+           <ol><li>주소창의 자물쇠/카메라 아이콘을 누르세요</li>
+               <li>카메라를 <b>허용</b>으로 바꾸고 새로고침하세요</li></ol>`
+        : `<b>카메라를 열지 못했습니다.</b><ol><li>다른 앱이 카메라를 쓰고 있는지 확인하세요</li>
+               <li>페이지를 새로고침해 주세요</li></ol>`;
+      return;
+    }
+
+    gate.classList.add('hidden');
+    hud.classList.add('show');
+    reticle.classList.add('show');
+    setStatus('증거물을 화면에 담아 주세요');
+    watchCamera();
+  });
+
+  // ── 4-b. 진단 ──────────────────────────────────────────
+  // 카메라 화면이 검게 나오는 사고가 잦아서(레이어 문제) 스스로 진단해 알려준다.
+  // ?debug=1 을 붙이면 항상 표시, 아니면 3초 안에 카메라를 못 찾을 때만 표시.
+  function watchCamera() {
+    const dbg = $('dbg');
+    const forced = /[?&]debug/.test(location.search);
+    if (forced) dbg.classList.add('show');
+    const t0 = Date.now();
+
+    setInterval(() => {
+      const cam = [...document.body.children].find((e) => e.tagName === 'VIDEO');
+      const bodyBg = getComputedStyle(document.body).backgroundColor;
+      const bgOpaque = !/rgba\(0,\s*0,\s*0,\s*0\)|transparent/.test(bodyBg);
+      const lines = [];
+
+      if (!cam) {
+        lines.push('카메라 ✗ 영상 엘리먼트 없음');
+      } else {
+        const r = cam.getBoundingClientRect();
+        lines.push(`카메라 ${cam.videoWidth}×${cam.videoHeight}` +
+                   `  표시 ${Math.round(r.width)}×${Math.round(r.height)}` +
+                   (cam.videoWidth ? '' : '  ✗ 스트림 없음'));
+      }
+      lines.push(`타겟 ${document.querySelectorAll('[mindar-image-target]').length}` +
+                 `  body배경 ${bgOpaque ? '✗ 불투명(카메라 가려짐)' : '✓ 투명'}`);
+      dbg.textContent = lines.join('\n');
+
+      // 3초 넘게 카메라를 못 잡으면 자동으로 진단을 띄운다
+      if (!forced && Date.now() - t0 > 3000 &&
+          (!cam || !cam.videoWidth || bgOpaque)) {
+        dbg.classList.add('show');
+      }
+    }, 500);
+  }
+
+  // ── 5. 타겟 인식 처리 ──────────────────────────────────
+  TARGETS.forEach((t) => {
+    const el = $(t.id);
+    const video = $(t.video);
+
+    el.addEventListener('targetFound', () => {
+      reticle.classList.add('found');
+      setStatus(`<b>${t.label}</b> — 재생 중`, false);
+      video.currentTime = 0;
+      const p = video.play();
+      if (p && p.catch) {
+        p.catch(() => {
+          // 소리 있는 재생이 막히면 음소거로 재생하고 버튼을 띄운다
+          video.muted = true;
+          soundBtn.classList.add('show');
+          video.play().catch(() => setStatus('영상을 재생할 수 없습니다', false));
+        });
+      }
+    });
+
+    el.addEventListener('targetLost', () => {
+      reticle.classList.remove('found');
+      video.pause();
+      setStatus('증거물을 화면에 담아 주세요');
+    });
+  });
+})();
+</script>
+</body>
+</html>
