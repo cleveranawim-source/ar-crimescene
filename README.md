@@ -1,12 +1,23 @@
-# ACCESS DENIED — 증거 스캔 (웹 AR)
+# 웹 AR — 명지대학교교회 중등부 여름수련회
 
-명지대학교교회 중등부 여름수련회 크라임씬용 웹 AR.
-앱 설치 없이 브라우저로 증거물을 비추면 영상이 재생된다. MindAR + A-Frame.
+앱 설치 없이 브라우저만으로 동작하는 AR. 두 페이지가 있다.
 
-**<https://cleveranawim-source.github.io/ar-crimescene/>**
+| 페이지 | 하는 일 |
+|---|---|
+| **[logo.html](https://cleveranawim-source.github.io/ar-crimescene/logo.html)** | QR 을 비추면 **password: JESUS 로고가 입체로 떠오른다** |
+| [index.html](https://cleveranawim-source.github.io/ar-crimescene/) | 증거물을 비추면 영상이 재생된다 (크라임씬용) |
 
 - 폰 브라우저(Safari / Chrome)로 열어야 한다. **카카오톡 등 인앱 브라우저는 카메라가 차단**되며, 감지되면 안내가 표시된다.
-- `?debug=1` 을 붙이면 카메라·타겟 상태 진단이 표시된다.
+- `?debug=1` 을 붙이면 진단 정보가 표시된다.
+
+## logo.html
+
+명찰에 붙인 QR 스티커를 비추면 로고가 3D 로 뜬다. QR 에 이 페이지 주소가 담겨 있어
+폰 기본 카메라로 찍으면 페이지가 바로 열리고, 그대로 그 QR 이 AR 마커가 된다.
+
+3D 라이브러리를 쓰지 않는다. QR 네 모서리 → 호모그래피 → 카메라 자세(R|t) → CSS `matrix3d` 로
+브라우저가 직접 원근을 그린다. 입체감은 같은 이미지를 여러 장 겹쳐 두께를 만드는 방식.
+검출은 `BarcodeDetector` API, 없으면 `jsQR` 로 폴백한다(아이폰 사파리).
 
 ## 이 저장소에 없는 것
 

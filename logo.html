@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>password: JESUS — 3D 로고 스캔</title>
+
+  <script src="./vendor/jsQR.js"></script>
+  <script src="./qr-tracker.js"></script>
+
+  <style>
+    :root { color-scheme: dark; --mint:#3FE5A0; }
+    * { box-sizing: border-box; }
+    html { background: #000; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body {
+      height: 100dvh;
+      font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: #e8ecf1; background: transparent;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #stage { position: fixed; inset: 0; overflow: hidden; }
+    #cam {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; background: #000;
+    }
+
+    /* ── 3D 무대 ────────────────────────────────────────
+       perspective 를 실제 카메라 초점거리에 맞추고, perspective-origin 을
+       화면 중심(=주점)에 둔다. 그래야 CSS 투영이 카메라 투영과 일치한다. */
+    #scene {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      transform-style: preserve-3d;
+    }
+    #anchor {
+      position: absolute; left: 0; top: 0;
+      width: 0; height: 0;
+      transform-style: preserve-3d;
+      will-change: transform;
+      visibility: hidden;
+    }
+    #anchor.show { visibility: visible; }
+    /* 로고 판을 여러 장 겹쳐 두께를 만든다 (아크릴 스탠드 느낌) */
+    #slab { position: absolute; left: 0; top: 0; transform-style: preserve-3d; }
+    #slab img {
+      position: absolute; left: 0; top: 0;
+      display: block;
+      /* 반투명 가장자리가 층마다 누적되지 않도록 뒤층은 어둡게 깔아 '옆면'을 만든다 */
+      filter: brightness(.42) saturate(.75);
+    }
+    #slab img.front { filter: none; }
+
+    /* 검출 외곽선 */
+    #outline { position: absolute; inset: 0; pointer-events: none; }
+    #outline polygon {
+      fill: none; stroke: var(--mint); stroke-width: 3;
+      stroke-linejoin: round; opacity: .55;
+    }
+    #outline.hide { display: none; }
+
+    /* ── 게이트 ── */
+    #gate {
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 20px; padding: 32px 26px; text-align: center;
+      background: radial-gradient(120% 80% at 50% 0%, #2b2a58 0%, #0a0a14 72%);
+    }
+    #gate.hidden { display: none; }
+    #gate img { width: min(74vw, 330px); filter: drop-shadow(0 10px 30px #0008); }
+    #gate p { margin: 0; color: #a6a3c8; max-width: 20em; font-size: 14px; }
+    #start {
+      margin-top: 4px;
+      background: var(--mint); color: #06231a; border: 0; border-radius: 14px;
+      padding: 17px 40px; font-size: 16.5px; font-weight: 800; cursor: pointer;
+      box-shadow: 0 8px 30px #3fe5a033;
+    }
+    #start:active { transform: translateY(1px); }
+    #start:disabled { opacity: .6; }
+    .hint { font-size: 12.5px; color: #6b6890; }
+    #warn {
+      display: none; max-width: 24em; text-align: left;
+      background: #241416; border: 1px solid #ff4d5e44; border-radius: 14px;
+      padding: 18px 20px; color: #ffd9dd; font-size: 13.5px;
+    }
+    #warn.show { display: block; }
+    #warn b { color: #ff8e99; }
+    #warn ol { margin: 10px 0 0; padding-left: 18px; }
+    #copy {
+      margin-top: 14px; background: #ff4d5e; color: #fff; border: 0;
+      border-radius: 9px; padding: 10px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer;
+    }
+
+    /* ── HUD ── */
+    #hud {
+      position: fixed; z-index: 20; left: 0; right: 0;
+      bottom: calc(22px + env(safe-area-inset-bottom));
+      display: none; flex-direction: column; align-items: center; gap: 10px;
+      pointer-events: none;
+    }
+    #hud.show { display: flex; }
+    #status {
+      background: #000000b8; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+      border: 1px solid #ffffff1a; border-radius: 999px;
+      padding: 10px 20px; font-size: 13.5px; text-align: center;
+    }
+    #status .dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--mint); margin-right: 8px; vertical-align: 1px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
+    .pill {
+      pointer-events: auto;
+      background: #000000b8; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+      border: 1px solid #ffffff1a; color: #e8ecf1; border-radius: 999px;
+      padding: 9px 16px; font-size: 13px; cursor: pointer; display: none;
+    }
+    .pill.show { display: block; }
+    .pill.on { background: var(--mint); color: #06231a; border-color: transparent; font-weight: 700; }
+
+    #reticle {
+      position: fixed; z-index: 15; inset: 0; display: none;
+      align-items: center; justify-content: center; pointer-events: none;
+    }
+    #reticle.show { display: flex; }
+    #reticle > div {
+      width: min(56vw, 230px); aspect-ratio: 1;
+      border: 1.5px solid #ffffff33; border-radius: 18px;
+      transition: opacity .25s;
+    }
+    #reticle.found > div { opacity: 0; }
+
+    #dbg {
+      position: fixed; z-index: 25;
+      top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px;
+      font: 11px/1.5 ui-monospace, monospace; color: #ffffff88;
+      background: #000000aa; border-radius: 6px; padding: 6px 9px;
+      display: none; white-space: pre-wrap; word-break: break-all;
+    }
+    #dbg.show { display: block; }
+  </style>
+</head>
+<body>
+
+  <div id="stage">
+    <video id="cam" playsinline webkit-playsinline muted autoplay></video>
+    <svg id="outline" class="hide"><polygon points="" /></svg>
+    <div id="scene">
+      <div id="anchor"><div id="slab"></div></div>
+    </div>
+  </div>
+
+  <div id="dbg"></div>
+  <div id="reticle"><div></div></div>
+
+  <div id="hud">
+    <button id="torch" class="pill">🔦 조명</button>
+    <div id="status"><span class="dot"></span>QR 코드를 비춰 보세요</div>
+  </div>
+
+  <div id="gate">
+    <img src="./public/logo/password-jesus.png" alt="password: JESUS" />
+    <p>QR 코드를 카메라로 비추면<br />로고가 입체로 튀어나옵니다.</p>
+    <div id="warn"></div>
+    <button id="start">카메라 켜고 시작</button>
+    <div class="hint">카메라 권한을 허용해 주세요</div>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const U = window.QRTrackerUtil;
+  const { sub, mul, dot, norm, cross } = U.vec;
+
+  const gate = $('gate'), warn = $('warn'), startBtn = $('start');
+  const hud = $('hud'), statusEl = $('status'), reticle = $('reticle'), torchBtn = $('torch');
+  const cam = $('cam'), scene = $('scene'), anchor = $('anchor'), slab = $('slab');
+  const outline = $('outline'), poly = outline.querySelector('polygon'), dbg = $('dbg');
+
+  const params = new URLSearchParams(location.search);
+  const DEBUG = params.has('debug');
+  const FOV = Number(params.get('fov')) || 62;      // 폰 후면 카메라 수평 화각(도)
+
+  // 명찰 QR 하나만 받는다 (방탈출 증거물 마커는 쓰지 않는다).
+  // 짧은 ID(PJ01) 든, 이 페이지를 가리키는 URL 이든 둘 다 통과시킨다.
+  // 그래야 QR 에 URL 만 담아도 되고 — 폰 기본 카메라로 찍으면 페이지가 바로 열린다 —
+  // QR 을 더 촘촘하게 만들 필요가 없다.
+  const ACCEPT = /PJ01|ar-crimescene/i;
+  function parseId(raw) {
+    return raw && ACCEPT.test(String(raw)) ? 'PJ01' : null;
+  }
+
+  // ── 로고 판 만들기 ──────────────────────────────────────
+  // 마커 한 변을 S 로 두고(로컬 px), 로고 폭을 마커 폭의 LOGO_W 배로 그린다.
+  const S = 200;
+  const LOGO_W = 2.15;                 // 마커 폭 대비 로고 폭
+  const LOGO_AR = 482 / 1024;          // 로고 이미지 세로/가로
+  const LAYERS = 18;                   // 두께를 만드는 판 수
+  const THICK = 0.115;                 // 마커 폭 대비 두께
+
+  const lw = S * LOGO_W, lh = lw * LOGO_AR;
+  const thick = S * THICK, step = thick / (LAYERS - 1);
+
+  for (let i = 0; i < LAYERS; i++) {
+    const img = document.createElement('img');
+    img.src = './public/logo/password-jesus.png';
+    img.width = lw; img.height = lh;
+    img.style.width = lw + 'px';
+    img.style.height = lh + 'px';
+    // 로컬 원점이 로고 중앙에 오도록 반쯤 당기고, 층마다 z 를 띄운다
+    img.style.transform =
+      `translate3d(${-lw / 2}px, ${-lh / 2}px, ${(-thick / 2 + i * step).toFixed(2)}px)`;
+    if (i === LAYERS - 1) img.className = 'front';   // 맨 앞장만 원색
+    slab.appendChild(img);
+  }
+
+  const setStatus = (html, spin = true) => {
+    statusEl.innerHTML = (spin ? '<span class="dot"></span>' : '') + html;
+  };
+
+  // ── 자세 → CSS 3D 변환 ─────────────────────────────────
+  // M_css = T(0,0,f) · diag(1,1,−1) · [ex ey ez | p]
+  // diag(1,1,−1) 은 카메라 좌표계(z 앞쪽)를 CSS 좌표계(z 보는 쪽)로 뒤집는다.
+  function cssMatrix(ex, ey, ez, p, f) {
+    return `matrix3d(` +
+      `${ex[0]},${ex[1]},${-ex[2]},0, ` +
+      `${ey[0]},${ey[1]},${-ey[2]},0, ` +
+      `${ez[0]},${ez[1]},${-ez[2]},0, ` +
+      `${p[0]},${p[1]},${f - p[2]},1)`;
+  }
+
+  let t0 = performance.now();
+  let appear = 0;                       // 등장 애니메이션 0→1
+
+  function place(pose) {
+    const { R, t, f } = pose;
+    const [r1, r2, r3] = R;
+
+    // 마커 평면에 그대로 눕힌다 — 세워두면 벽에 붙은 QR 에서 어색해진다.
+    // CSS 는 x 오른쪽 · y 아래 · z 보는 쪽이므로 로컬 +z 는 마커 법선의 카메라 쪽.
+    let ex = r1, ey = r2, ez = mul(r3, -1);
+
+    const now = performance.now();
+    const T = (now - t0) / 1000;
+
+    // 등장: 살짝 튀어오르며 커진다
+    appear = Math.min(1, appear + 0.085);
+    const e = 1 - Math.pow(1 - appear, 3);
+    const scale = 0.55 + 0.45 * e + 0.06 * Math.sin(T * 2.1) * e;
+
+    // 좌우로 흔들어 두께가 보이게 (전체 회전은 옆면만 보이는 구간이 생긴다)
+    const swing = 0.42 * Math.sin(T * 1.15) * e;
+    const cs = Math.cos(swing), sn = Math.sin(swing);
+    const nx = [ex[0] * cs + ez[0] * sn, ex[1] * cs + ez[1] * sn, ex[2] * cs + ez[2] * sn];
+    const nz = [-ex[0] * sn + ez[0] * cs, -ex[1] * sn + ez[1] * cs, -ex[2] * sn + ez[2] * cs];
+    ex = nx; ez = nz;
+
+    // 위아래로 살짝 끄덕
+    const nod = 0.13 * Math.sin(T * 0.87) * e;
+    const cn = Math.cos(nod), sneg = Math.sin(nod);
+    const my = [ey[0] * cn + ez[0] * sneg, ey[1] * cn + ez[1] * sneg, ey[2] * cn + ez[2] * sneg];
+    const mz = [-ey[0] * sneg + ez[0] * cn, -ey[1] * sneg + ez[1] * cn, -ey[2] * sneg + ez[2] * cn];
+    ey = my; ez = mz;
+
+    // 마커 위로 살짝 떠오른다 (법선 방향)
+    const lift = S * (0.10 + 0.035 * Math.sin(T * 1.6)) * e;
+    const p = [
+      t[0] * S + ez[0] * lift,
+      t[1] * S + ez[1] * lift,
+      t[2] * S + ez[2] * lift,
+    ];
+
+    anchor.style.transform =
+      cssMatrix(mul(ex, scale), mul(ey, scale), mul(ez, scale), p, f);
+
+    // perspective 는 초점거리와 같아야 CSS 투영이 카메라 투영과 일치한다
+    scene.style.perspective = f + 'px';
+    scene.style.perspectiveOrigin = `${innerWidth / 2}px ${innerHeight / 2}px`;
+    anchor.style.left = (innerWidth / 2) + 'px';
+    anchor.style.top = (innerHeight / 2) + 'px';
+  }
+
+  // ── 프레임 처리 ────────────────────────────────────────
+  let shown = false;
+  function onFrame(st) {
+    const id = st.found ? parseId(tracker.value) : null;
+
+    if (st.found && id && st.pose) {
+      if (!shown) { shown = true; appear = 0; t0 = performance.now(); setStatus('password: JESUS', false); }
+      place(st.pose);
+      anchor.classList.add('show');
+      poly.setAttribute('points', st.quad.map((p) => p.join(',')).join(' '));
+      outline.classList.remove('hide');
+      reticle.classList.add('found');
+    } else {
+      if (shown) { shown = false; setStatus(st.found ? '등록되지 않은 코드입니다' : 'QR 코드를 비춰 보세요', !st.found); }
+      else if (st.found && !id) setStatus('등록되지 않은 코드입니다', false);
+      anchor.classList.remove('show');
+      outline.classList.add('hide');
+      reticle.classList.remove('found');
+    }
+
+    if (DEBUG) {
+      const pose = st.pose;
+      dbg.textContent =
+        `${tracker.detectMode}  ${tracker.fps}fps  검출 ${tracker.detMs.toFixed(0)}ms  화각 ${FOV}°\n` +
+        `읽은값 ${tracker.value || '(없음)'}  마커 ${id || '-'}\n` +
+        (pose ? `거리 ${(pose.t[2]).toFixed(2)}칸  f ${pose.f.toFixed(0)}px` : '자세 없음');
+    }
+  }
+
+  // ── 시작 ───────────────────────────────────────────────
+  const pre = U.preflightHTML();
+  if (pre) {
+    startBtn.style.display = 'none';
+    warn.classList.add('show');
+    warn.innerHTML = pre;
+    const cp = $('copy');
+    if (cp) cp.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(location.href); cp.textContent = '복사됨 — 브라우저에 붙여넣기'; }
+      catch { cp.textContent = location.href; }
+    });
+    if (/KAKAOTALK/i.test(navigator.userAgent) && !U.isIOS()) {
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+    }
+    return;
+  }
+
+  const tracker = new QRTracker({ video: cam, onFrame, pose: true, fovDeg: FOV,
+                                  detectWidth: Number(params.get('det')) || 640 });
+
+  torchBtn.addEventListener('click', async () => {
+    const ok = await tracker.setTorch(!tracker.torchOn);
+    if (ok) torchBtn.classList.toggle('on', tracker.torchOn);
+    else torchBtn.classList.remove('show');
+  });
+
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    startBtn.textContent = '카메라 준비 중…';
+    try {
+      await tracker.start();
+    } catch (err) {
+      startBtn.style.display = 'none';
+      warn.classList.add('show');
+      warn.innerHTML = U.cameraErrorHTML(err);
+      return;
+    }
+    if (tracker.hasTorch) torchBtn.classList.add('show');
+    gate.classList.add('hidden');
+    hud.classList.add('show');
+    reticle.classList.add('show');
+    if (DEBUG) dbg.classList.add('show');
+    setStatus('QR 코드를 비춰 보세요');
+  });
+})();
+</script>
+</body>
+</html>
