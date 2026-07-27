@@ -4,7 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>password: JESUS — 3D 로고 스캔</title>
+  <!-- 제목도 주제를 드러내면 안 된다 — 폰 브라우저 주소창·공유 미리보기에 그대로 뜬다.
+       잠금이 풀린 뒤에 진짜 제목으로 바꾼다. -->
+  <title>잠금 해제 — QR 스캔</title>
 
   <script src="./vendor/jsQR.js"></script>
   <script src="./qr-tracker.js"></script>
@@ -70,10 +72,24 @@
       background: radial-gradient(120% 80% at 50% 0%, #2b2a58 0%, #0a0a14 72%);
     }
     #gate.hidden { display: none; }
-    /* 시작 화면에서 로고를 다 보여주면 정작 AR 로 뜰 때 감흥이 없다.
-       주제가 password 이므로 JESUS 다섯 글자를 색깔 점으로 가려 둔다. */
-    #lock { display: flex; flex-direction: column; align-items: center; gap: 26px; }
-    #lock img { width: min(72vw, 320px); filter: drop-shadow(0 10px 30px #0008); }
+    /* 시작 화면에서는 주제를 한 글자도 드러내지 않는다.
+       잠긴 자물쇠와 가려진 다섯 글자만 보여 주고, 정답은 AR 로만 열린다. */
+    #lock { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+    #padlock {
+      width: min(38vw, 170px); height: auto;
+      filter: drop-shadow(0 12px 34px #0009);
+      animation: rattle 3.4s ease-in-out infinite;
+      transform-origin: 50% 78%;
+    }
+    /* 잠긴 문이 덜컹거리듯 — 열리지 않는다는 걸 몸짓으로 알린다 */
+    @keyframes rattle {
+      0%, 62%, 100% { transform: rotate(0) }
+      66% { transform: rotate(-3.5deg) }
+      70% { transform: rotate(3deg) }
+      74% { transform: rotate(-2deg) }
+      78% { transform: rotate(1.2deg) }
+      82% { transform: rotate(0) }
+    }
     #dots { display: flex; gap: min(3.6vw, 17px); }
     #dots i {
       width: min(11.5vw, 52px); aspect-ratio: 1; border-radius: 50%;
@@ -181,13 +197,34 @@
 
   <div id="gate">
     <div id="lock">
-      <img src="./public/logo/password-only.png" alt="password:" />
-      <div id="dots" role="img" aria-label="비밀번호 다섯 글자, 아직 가려져 있음">
+      <!-- 원본 스티커 결(굵은 검정 외곽선 + 흰 테두리)에 맞춰 그린 잠긴 자물쇠.
+           고리는 '획'이 아니라 구멍이 뚫린 채움 도형이어야 안쪽으로 배경이 비친다.
+           흰 실루엣 → 색 채움 + 검정 외곽선 순으로 겹친다. -->
+      <svg id="padlock" viewBox="0 0 150 186" role="img" aria-label="잠긴 자물쇠">
+        <defs>
+          <path id="shk" d="M36 84V54a39 39 0 0 1 78 0v30h-13V54a26 26 0 0 0-52 0v30z" />
+        </defs>
+        <!-- 흰 스티커 테두리 -->
+        <use href="#shk" fill="#fff" stroke="#fff" stroke-width="18" stroke-linejoin="round" />
+        <rect x="22" y="80" width="106" height="88" rx="20"
+              fill="#fff" stroke="#fff" stroke-width="18" stroke-linejoin="round" />
+        <!-- 본체 -->
+        <use href="#shk" fill="#9FC9E8" stroke="#111" stroke-width="7" stroke-linejoin="round" />
+        <rect x="22" y="80" width="106" height="88" rx="20"
+              fill="#EF5A4C" stroke="#111" stroke-width="7" />
+        <path d="M22 140h106v8a20 20 0 0 1-20 20H42a20 20 0 0 1-20-20z"
+              fill="#4E7FC4" stroke="#111" stroke-width="7" stroke-linejoin="round" />
+        <circle cx="75" cy="112" r="11" fill="#111" />
+        <path d="M75 119l6.5 18h-13z" fill="#111" />
+        <path d="M36 96c0-5 4-9 9-9" stroke="#ffffff99" stroke-width="6"
+              stroke-linecap="round" fill="none" />
+      </svg>
+      <div id="dots" role="img" aria-label="아직 열리지 않은 다섯 글자">
         <i style="--c:#78c0f0"></i><i style="--c:#e484b4"></i><i style="--c:#6cc078"></i>
         <i style="--c:#f0903c"></i><i style="--c:#f0cc3c"></i>
       </div>
     </div>
-    <p>명찰에 붙은 QR 을 비추면<br />비밀번호가 풀립니다.</p>
+    <p>명찰에 붙은 QR 을 비추면<br />잠금이 풀립니다.</p>
     <div id="warn"></div>
     <button id="start">카메라 켜고 시작</button>
     <div class="hint">카메라 권한을 허용해 주세요</div>
@@ -313,7 +350,11 @@
     const id = st.found ? parseId(tracker.value) : null;
 
     if (st.found && id && st.pose) {
-      if (!shown) { shown = true; appear = 0; t0 = performance.now(); setStatus('password: JESUS', false); }
+      if (!shown) {
+        shown = true; appear = 0; t0 = performance.now();
+        setStatus('password: JESUS', false);
+        document.title = 'password: JESUS';     // 열린 뒤에야 제목을 드러낸다
+      }
       place(st.pose);
       anchor.classList.add('show');
       poly.setAttribute('points', st.quad.map((p) => p.join(',')).join(' '));
