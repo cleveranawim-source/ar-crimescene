@@ -70,7 +70,24 @@
       background: radial-gradient(120% 80% at 50% 0%, #2b2a58 0%, #0a0a14 72%);
     }
     #gate.hidden { display: none; }
-    #gate img { width: min(74vw, 330px); filter: drop-shadow(0 10px 30px #0008); }
+    /* 시작 화면에서 로고를 다 보여주면 정작 AR 로 뜰 때 감흥이 없다.
+       주제가 password 이므로 JESUS 다섯 글자를 색깔 점으로 가려 둔다. */
+    #lock { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+    #lock img { width: min(72vw, 320px); filter: drop-shadow(0 10px 30px #0008); }
+    #dots { display: flex; gap: min(3.6vw, 17px); }
+    #dots i {
+      width: min(11.5vw, 52px); aspect-ratio: 1; border-radius: 50%;
+      background: var(--c);
+      box-shadow: 0 0 0 3px #111, 0 0 0 8px #fff, 0 9px 20px #0007;
+      animation: bob 2.6s ease-in-out infinite;
+    }
+    #dots i:nth-child(2) { animation-delay: .13s }
+    #dots i:nth-child(3) { animation-delay: .26s }
+    #dots i:nth-child(4) { animation-delay: .39s }
+    #dots i:nth-child(5) { animation-delay: .52s }
+    @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-14%) } }
+    @media (prefers-reduced-motion: reduce) { #dots i { animation: none } }
+
     #gate p { margin: 0; color: #a6a3c8; max-width: 20em; font-size: 14px; }
     #start {
       margin-top: 4px;
@@ -163,8 +180,14 @@
   </div>
 
   <div id="gate">
-    <img src="./public/logo/password-jesus.png" alt="password: JESUS" />
-    <p>QR 코드를 카메라로 비추면<br />로고가 입체로 튀어나옵니다.</p>
+    <div id="lock">
+      <img src="./public/logo/password-only.png" alt="password:" />
+      <div id="dots" role="img" aria-label="비밀번호 다섯 글자, 아직 가려져 있음">
+        <i style="--c:#78c0f0"></i><i style="--c:#e484b4"></i><i style="--c:#6cc078"></i>
+        <i style="--c:#f0903c"></i><i style="--c:#f0cc3c"></i>
+      </div>
+    </div>
+    <p>명찰에 붙은 QR 을 비추면<br />비밀번호가 풀립니다.</p>
     <div id="warn"></div>
     <button id="start">카메라 켜고 시작</button>
     <div class="hint">카메라 권한을 허용해 주세요</div>
