@@ -172,7 +172,17 @@
 
       await this.video.play().catch(() => {});
       if (!this.video.videoWidth) {
-        await new Promise((res) => this.video.addEventListener('loadedmetadata', res, { once: true }));
+        // 권한은 났는데 프레임이 안 오는 경우가 있다(카메라 점유 등).
+        // 시간 제한이 없으면 시작 화면이 영영 굳은 채로 남는다.
+        await new Promise((res) => {
+          const done = () => { clearTimeout(timer); res(); };
+          const timer = setTimeout(done, 5000);
+          this.video.addEventListener('loadedmetadata', done, { once: true });
+        });
+      }
+      if (!this.video.videoWidth) {
+        this.track && this.track.stop();
+        throw new Error('카메라에서 영상이 오지 않습니다');
       }
 
       this.updateMapping();

@@ -238,20 +238,23 @@
     return raw && ACCEPT.test(String(raw)) ? 'PJ01' : null;
   }
 
-  // ── 로고 판 만들기 ──────────────────────────────────────
-  // 마커 한 변을 S 로 두고(로컬 px), 로고 폭을 마커 폭의 LOGO_W 배로 그린다.
+  // ── 입체 판 만들기 ──────────────────────────────────────
+  // 마커 한 변을 S 로 두고(로컬 px), 그림 폭을 마커 폭의 ART_W 배로 그린다.
   const S = 200;
-  const LOGO_W = 2.15;                 // 마커 폭 대비 로고 폭
-  const LOGO_AR = 482 / 1024;          // 로고 이미지 세로/가로
+  const ART = './public/logo/summer-camp-boy.webp';
+  const ART_W = 1.85;                  // 마커 폭 대비 그림 폭
+  const ART_AR = 1239 / 1100;          // 그림 세로/가로 (세로로 긴 인물)
   const LAYERS = 18;                   // 두께를 만드는 판 수
-  const THICK = 0.115;                 // 마커 폭 대비 두께
+  const THICK = 0.085;                 // 마커 폭 대비 두께
+  // 발이 마커 아래쪽 가장자리에 오도록 위로 밀어 올린다 (마커 위에 서 있는 느낌)
+  const RISE = ART_W * ART_AR / 2 - 0.5;
 
-  const lw = S * LOGO_W, lh = lw * LOGO_AR;
+  const lw = S * ART_W, lh = lw * ART_AR;
   const thick = S * THICK, step = thick / (LAYERS - 1);
 
   for (let i = 0; i < LAYERS; i++) {
     const img = document.createElement('img');
-    img.src = './public/logo/password-jesus.png';
+    img.src = ART;
     img.width = lw; img.height = lh;
     img.style.width = lw + 'px';
     img.style.height = lh + 'px';
@@ -303,19 +306,22 @@
     const nz = [-ex[0] * sn + ez[0] * cs, -ex[1] * sn + ez[1] * cs, -ex[2] * sn + ez[2] * cs];
     ex = nx; ez = nz;
 
-    // 위아래로 살짝 끄덕
-    const nod = 0.13 * Math.sin(T * 0.87) * e;
+    // 위아래로 살짝 끄덕 — 세로로 긴 그림이라 조금만 준다 (크면 발이 크게 움직인다)
+    const nod = 0.055 * Math.sin(T * 0.87) * e;
     const cn = Math.cos(nod), sneg = Math.sin(nod);
     const my = [ey[0] * cn + ez[0] * sneg, ey[1] * cn + ez[1] * sneg, ey[2] * cn + ez[2] * sneg];
     const mz = [-ey[0] * sneg + ez[0] * cn, -ey[1] * sneg + ez[1] * cn, -ey[2] * sneg + ez[2] * cn];
     ey = my; ez = mz;
 
-    // 마커 위로 살짝 떠오른다 (법선 방향)
+    // 마커 위로 살짝 떠오르고(법선 방향), 발이 마커에 닿도록 위로 올린다.
+    // ey 는 로컬 '아래'라 -ey 가 위. 흔들림 축(ey)을 지나는 점은 회전해도 안 움직이므로
+    // 발밑은 제자리에서 몸만 좌우로 도는 모양이 된다.
     const lift = S * (0.10 + 0.035 * Math.sin(T * 1.6)) * e;
+    const rise = S * RISE * e;
     const p = [
-      t[0] * S + ez[0] * lift,
-      t[1] * S + ez[1] * lift,
-      t[2] * S + ez[2] * lift,
+      t[0] * S - ey[0] * rise + ez[0] * lift,
+      t[1] * S - ey[1] * rise + ez[1] * lift,
+      t[2] * S - ey[2] * rise + ez[2] * lift,
     ];
 
     anchor.style.transform =
@@ -336,8 +342,8 @@
     if (st.found && id && st.pose) {
       if (!shown) {
         shown = true; appear = 0; t0 = performance.now();
-        setStatus('password: JESUS', false);
-        document.title = 'password: JESUS';     // 열린 뒤에야 제목을 드러낸다
+        setStatus('1416 중등부 여름수련회', false);
+        document.title = '1416 중등부 여름수련회';   // 열린 뒤에야 제목을 드러낸다
       }
       place(st.pose);
       anchor.classList.add('show');
